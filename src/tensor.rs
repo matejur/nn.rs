@@ -2,8 +2,8 @@ use rand::Rng;
 
 #[derive(Debug)]
 pub struct Tensor {
-    shape: Vec<usize>,
-    elems: Box<[f32]>,
+    pub shape: Vec<usize>,
+    pub elems: Box<[f32]>,
 }
 
 impl Tensor {
@@ -36,7 +36,7 @@ impl Tensor {
 
     pub fn randomize(&mut self) {
         let mut rng = rand::thread_rng();
-        self.elems.iter_mut().for_each(|x| *x = rng.gen());
+        self.elems.iter_mut().for_each(|x| *x = rng.gen::<f32>() * 2.0 - 1.0);
     }
 
     pub fn incrementing(&mut self) {
@@ -95,19 +95,41 @@ impl Tensor {
         output
     }
 
+    pub fn square(&mut self) {
+        self.elems.iter_mut().for_each(|x| *x = x.powi(2));
+    }
+
+    pub fn sigmoid(&mut self) {
+        self.elems.iter_mut().for_each(|x| *x = 1.0/(1.0 + f32::exp(-*x)));
+    }
+
+    pub fn sum(&self) -> f32 {
+        self.elems.iter().sum()
+    }
+
     pub fn add(out: &mut Self, a: &Self, b: &Self) {
         if out.shape != a.shape && a.shape != b.shape {
-            todo!("Broadcasting?");
+            if a.shape[a.shape.len() - 1] != b.shape[0] || b.shape.len() > 1 {
+                panic!(
+                    "Adding tensors of shapes {:?} and {:?} not supported",
+                    a.shape, b.shape
+                );
+            }
         }
 
         for i in 0..out.elems.len() {
-            out.elems[i] = a.elems[i] + b.elems[i];
+            out.elems[i] = a.elems[i] + b.elems[i % b.elems.len()];
         }
     }
 
     pub fn add_alloc(&self, other: &Self) -> Self {
         if self.shape != other.shape {
-            todo!("Broadcasting?");
+            if self.shape[self.shape.len() - 1] != other.shape[0] || other.shape.len() > 1 {
+                panic!(
+                    "Adding tensors of shapes {:?} and {:?} not supported",
+                    self.shape, other.shape
+                );
+            }
         }
 
         let out_shape = self.shape.to_owned();
@@ -121,11 +143,16 @@ impl Tensor {
 
     pub fn add_self(&mut self, other: &Self) {
         if self.shape != other.shape {
-            todo!("Broadcasting?");
+            if self.shape[self.shape.len() - 1] != other.shape[0] || other.shape.len() > 1 {
+                panic!(
+                    "Adding tensors of shapes {:?} and {:?} not supported",
+                    self.shape, other.shape
+                );
+            }
         }
 
         for i in 0..self.elems.len() {
-            self.elems[i] += other.elems[i];
+            self.elems[i] += other.elems[i % other.elems.len()];
         }
     }
 
@@ -204,9 +231,13 @@ impl std::fmt::Display for Tensor {
     }
 }
 
+pub fn to_float(x: &[i32]) -> Vec<f32> {
+    x.iter().map(|x| *x as f32).collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Tensor;
+    use super::{to_float, Tensor};
 
     #[test]
     #[should_panic]
@@ -218,24 +249,24 @@ mod tests {
 
     #[test]
     fn matmul() {
-        let m1 = Tensor::from_array(vec![1, 4], &[1.0, 2.0, 3.0, 4.0]);
-        let m2 = Tensor::from_array(vec![4, 1], &[4.0, 3.0, 2.0, 1.0]);
-        let r = Tensor::from_array(vec![1, 1], &[20.0]);
+        let m1 = Tensor::from_array(vec![1, 4], &to_float(&[1, 2, 3, 4]));
+        let m2 = Tensor::from_array(vec![4, 1], &to_float(&[4, 3, 2, 1]));
+        let r = Tensor::from_array(vec![1, 1], &to_float(&[20]));
 
         assert_eq!(m1.matmul_alloc(&m2), r);
 
         let r = Tensor::from_array(
             vec![4, 4],
-            &[4.0, 8.0, 12.0, 16.0, 3.0, 6.0, 9.0, 12.0, 2.0, 4.0, 6.0, 8.0, 1.0, 2.0, 3.0, 4.0],
+            &to_float(&[4, 8, 12, 16, 3, 6, 9, 12, 2, 4, 6, 8, 1, 2, 3, 4]),
         );
 
         assert_eq!(m2.matmul_alloc(&m1), r);
 
-        let m1 = Tensor::from_array(vec![3, 2], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
-        let m2 = Tensor::from_array(vec![2, 5], &[10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0]);
+        let m1 = Tensor::from_array(vec![3, 2], &to_float(&[1, 2, 3, 4, 5, 6]));
+        let m2 = Tensor::from_array(vec![2, 5], &to_float(&[10, 9, 8, 7, 6, 5, 4, 3, 2, 1]));
         let r = Tensor::from_array(
             vec![3, 5],
-            &[20.0, 17.0, 14.0, 11.0, 8.0, 50.0, 43.0, 36.0, 29.0, 22.0, 80.0, 69.0, 58.0, 47.0, 36.0],
+            &to_float(&[20, 17, 14, 11, 8, 50, 43, 36, 29, 22, 80, 69, 58, 47, 36]),
         );
 
         assert_eq!(m1.matmul_alloc(&m2), r);
@@ -243,9 +274,9 @@ mod tests {
 
     #[test]
     fn add() {
-        let mut m1 = Tensor::from_array(vec![2, 4], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
-        let m2 = Tensor::from_array(vec![2, 4], &[8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0]);
-        let r = Tensor::from_array(vec![2, 4], &[9.0; 8]);
+        let mut m1 = Tensor::from_array(vec![2, 4], &to_float(&[1, 2, 3, 4, 5, 6, 7, 8]));
+        let m2 = Tensor::from_array(vec![2, 4], &to_float(&[8, 7, 6, 5, 4, 3, 2, 1]));
+        let r = Tensor::from_array(vec![2, 4], &to_float(&[9; 8]));
         assert_eq!(m1.add_alloc(&m2), r);
 
         m1.add_self(&m2);
@@ -254,12 +285,23 @@ mod tests {
 
     #[test]
     fn sub() {
-        let mut m1 = Tensor::from_array(vec![2, 4], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
-        let m2 = Tensor::from_array(vec![2, 4], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+        let mut m1 = Tensor::from_array(vec![2, 4], &to_float(&[1, 2, 3, 4, 5, 6, 7, 8]));
+        let m2 = Tensor::from_array(vec![2, 4], &to_float(&[1, 2, 3, 4, 5, 6, 7, 8]));
         let r = Tensor::new(vec![2, 4]);
         assert_eq!(m1.sub_alloc(&m2), r);
 
         m1.sub_self(&m2);
+        assert_eq!(m1, r);
+    }
+
+    #[test]
+    fn add_broadcast() {
+        let mut m1 = Tensor::from_array(vec![2, 4], &to_float(&[1, 2, 3, 4, 5, 6, 7, 8]));
+        let m2 = Tensor::from_array(vec![4], &to_float(&[1, 2, 3, 4]));
+        let r = Tensor::from_array(vec![2, 4], &to_float(&[2, 4, 6, 8, 6, 8, 10, 12]));
+        assert_eq!(m1.add_alloc(&m2), r);
+
+        m1.add_self(&m2);
         assert_eq!(m1, r);
     }
 }
