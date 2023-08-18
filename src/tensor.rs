@@ -1,23 +1,12 @@
-use core::fmt;
-use std::{
-    fmt::Debug,
-    ops::{AddAssign, SubAssign},
-};
-
-use num::{Num, NumCast};
-use rand::{self, distributions::Standard, prelude::Distribution, Rng};
+use rand::Rng;
 
 #[derive(Debug)]
-pub struct Tensor<T: num::Num> {
+pub struct Tensor {
     shape: Vec<usize>,
-    elems: Box<[T]>,
+    elems: Box<[f32]>,
 }
 
-impl<T> Tensor<T>
-where
-    Standard: Distribution<T>,
-    T: Default + Num + NumCast + Copy + AddAssign + SubAssign + Debug,
-{
+impl Tensor {
     pub fn new(shape: Vec<usize>) -> Self {
         if shape.len() < 1 {
             panic!("Shape can't have a length of 0");
@@ -30,14 +19,13 @@ where
         let size: usize = shape.iter().product();
         Tensor {
             shape,
-            elems: vec![Default::default(); size].into_boxed_slice(),
+            elems: vec![0 as f32; size].into_boxed_slice(),
         }
     }
 
-    pub fn from_array(shape: Vec<usize>, elems: &[T]) -> Self {
+    pub fn from_array(shape: Vec<usize>, elems: &[f32]) -> Self {
         if shape.iter().product::<usize>() != elems.len() {
-            eprintln!("Product of shapes must match the length of array");
-            std::process::exit(1);
+            panic!("Product of shapes must match the length of array");
         }
 
         Tensor {
@@ -53,7 +41,7 @@ where
 
     pub fn incrementing(&mut self) {
         for i in 0..self.elems.len() {
-            self.elems[i] = num::NumCast::from(i).unwrap();
+            self.elems[i] = i as f32;
         }
     }
 
@@ -69,7 +57,7 @@ where
             );
         }
 
-        out.elems.fill(num::NumCast::from(0).unwrap());
+        out.elems.fill(0 as f32);
 
         let size_out_first = *out.shape.iter().next().unwrap();
         let size_out_last = *out.shape.iter().last().unwrap();
@@ -177,20 +165,20 @@ where
     }
 }
 
-impl<T: Num> PartialEq for Tensor<T> {
+impl PartialEq for Tensor {
     fn eq(&self, other: &Self) -> bool {
         self.shape == other.shape && self.elems == other.elems
     }
 }
 
-impl<T: fmt::Debug + num::Num> fmt::Display for Tensor<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fn print_subtensor<T: fmt::Debug>(
-            f: &mut fmt::Formatter<'_>,
+impl std::fmt::Display for Tensor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn print_subtensor(
+            f: &mut std::fmt::Formatter<'_>,
             shape: &[usize],
-            elems: &[T],
+            elems: &[f32],
             indent_size: usize,
-        ) -> fmt::Result {
+        ) -> std::fmt::Result {
             match shape {
                 &[_] => {
                     let indent = " ".repeat(indent_size * 2);
@@ -223,31 +211,31 @@ mod tests {
     #[test]
     #[should_panic]
     fn matmul_shape_check() {
-        let m1 = Tensor::<i32>::new(vec![2, 4]);
-        let m2 = Tensor::<i32>::new(vec![3, 4]);
+        let m1 = Tensor::new(vec![2, 4]);
+        let m2 = Tensor::new(vec![3, 4]);
         let _ = m1.matmul_alloc(&m2);
     }
 
     #[test]
     fn matmul() {
-        let m1 = Tensor::from_array(vec![1, 4], &[1, 2, 3, 4]);
-        let m2 = Tensor::from_array(vec![4, 1], &[4, 3, 2, 1]);
-        let r = Tensor::from_array(vec![1, 1], &[20]);
+        let m1 = Tensor::from_array(vec![1, 4], &[1.0, 2.0, 3.0, 4.0]);
+        let m2 = Tensor::from_array(vec![4, 1], &[4.0, 3.0, 2.0, 1.0]);
+        let r = Tensor::from_array(vec![1, 1], &[20.0]);
 
         assert_eq!(m1.matmul_alloc(&m2), r);
 
         let r = Tensor::from_array(
             vec![4, 4],
-            &[4, 8, 12, 16, 3, 6, 9, 12, 2, 4, 6, 8, 1, 2, 3, 4],
+            &[4.0, 8.0, 12.0, 16.0, 3.0, 6.0, 9.0, 12.0, 2.0, 4.0, 6.0, 8.0, 1.0, 2.0, 3.0, 4.0],
         );
 
         assert_eq!(m2.matmul_alloc(&m1), r);
 
-        let m1 = Tensor::from_array(vec![3, 2], &[1, 2, 3, 4, 5, 6]);
-        let m2 = Tensor::from_array(vec![2, 5], &[10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
+        let m1 = Tensor::from_array(vec![3, 2], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        let m2 = Tensor::from_array(vec![2, 5], &[10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0]);
         let r = Tensor::from_array(
             vec![3, 5],
-            &[20, 17, 14, 11, 8, 50, 43, 36, 29, 22, 80, 69, 58, 47, 36],
+            &[20.0, 17.0, 14.0, 11.0, 8.0, 50.0, 43.0, 36.0, 29.0, 22.0, 80.0, 69.0, 58.0, 47.0, 36.0],
         );
 
         assert_eq!(m1.matmul_alloc(&m2), r);
@@ -255,9 +243,9 @@ mod tests {
 
     #[test]
     fn add() {
-        let mut m1 = Tensor::from_array(vec![2, 4], &[1, 2, 3, 4, 5, 6, 7, 8]);
-        let m2 = Tensor::from_array(vec![2, 4], &[8, 7, 6, 5, 4, 3, 2, 1]);
-        let r = Tensor::from_array(vec![2, 4], &[9; 8]);
+        let mut m1 = Tensor::from_array(vec![2, 4], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+        let m2 = Tensor::from_array(vec![2, 4], &[8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0]);
+        let r = Tensor::from_array(vec![2, 4], &[9.0; 8]);
         assert_eq!(m1.add_alloc(&m2), r);
 
         m1.add_self(&m2);
@@ -266,8 +254,8 @@ mod tests {
 
     #[test]
     fn sub() {
-        let mut m1 = Tensor::from_array(vec![2, 4], &[1, 2, 3, 4, 5, 6, 7, 8]);
-        let m2 = Tensor::from_array(vec![2, 4], &[1, 2, 3, 4, 5, 6, 7, 8]);
+        let mut m1 = Tensor::from_array(vec![2, 4], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+        let m2 = Tensor::from_array(vec![2, 4], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
         let r = Tensor::new(vec![2, 4]);
         assert_eq!(m1.sub_alloc(&m2), r);
 
