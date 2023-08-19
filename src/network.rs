@@ -15,12 +15,12 @@ impl NeuralNetwork {
 
     pub fn forward(&self, x: &Tensor) -> Tensor {
         let mut x = self.layers[0].forward(x);
-        x.sigmoid();
 
         for layer in &self.layers[1..] {
+            x.relu();
             x = layer.forward(&x);
-            x.sigmoid();
         }
+        x.softmax();
 
         x
     }
@@ -28,6 +28,21 @@ impl NeuralNetwork {
     pub fn optimize(&mut self, lr: f32) {
         for i in 0..self.layers.len() {
             self.layers[i].optimize(lr);
+        }
+    }
+
+    pub fn print_layers(&self) {
+        for layer in &self.layers {
+            println!("Weights:\n{} Biases:\n{}", layer.weights, layer.biases);
+        }
+    }
+
+    pub fn print_gradients(&self) {
+        for layer in &self.layers {
+            println!(
+                "Weights grad:\n{} Biases grad:\n{}",
+                layer.weights_grad, layer.biases_grad
+            );
         }
     }
 

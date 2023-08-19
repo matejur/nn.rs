@@ -36,7 +36,9 @@ impl Tensor {
 
     pub fn randomize(&mut self) {
         let mut rng = rand::thread_rng();
-        self.elems.iter_mut().for_each(|x| *x = rng.gen::<f32>() * 2.0 - 1.0);
+        self.elems
+            .iter_mut()
+            .for_each(|x| *x = rng.gen::<f32>() * 2.0 - 1.0);
     }
 
     pub fn incrementing(&mut self) {
@@ -100,7 +102,50 @@ impl Tensor {
     }
 
     pub fn sigmoid(&mut self) {
-        self.elems.iter_mut().for_each(|x| *x = 1.0/(1.0 + f32::exp(-*x)));
+        self.elems
+            .iter_mut()
+            .for_each(|x| *x = 1.0 / (1.0 + f32::exp(-*x)));
+    }
+    pub fn relu(&mut self) {
+        self.elems.iter_mut().for_each(|x| *x = x.max(0.0));
+    }
+
+    pub fn argmax(&self) -> Vec<usize> {
+        let mut out = Vec::new();
+        for sample in 0..self.shape[0] {
+            let mut max = 0.0;
+            let mut max_index = 0;
+
+            for i in 0..self.shape[1] {
+                let index = sample * self.shape[1] + i;
+
+                if self.elems[index] > max {
+                    max = self.elems[index];
+                    max_index = i;
+                }
+            }
+
+            out.push(max_index);
+        }
+
+        out
+    }
+
+    pub fn softmax(&mut self) {
+        let max = self.elems.iter().copied().reduce(f32::max).unwrap();
+        for sample_index in 0..self.shape[0] {
+            let mut denom = 0.0;
+            for attrib_index in 0..self.shape[1] {
+                let i = sample_index * self.shape[1] + attrib_index;
+                self.elems[i] -= max;
+                denom += self.elems[i].exp()
+            }
+
+            for attrib_index in 0..self.shape[1] {
+                let i = sample_index * self.shape[1] + attrib_index;
+                self.elems[i] = self.elems[i].exp() / denom;
+            }
+        }
     }
 
     pub fn sum(&self) -> f32 {
