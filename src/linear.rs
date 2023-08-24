@@ -5,10 +5,18 @@ pub struct Linear {
     pub biases: Tensor,
     pub weights_grad: Tensor,
     pub biases_grad: Tensor,
+
+    activation: Activation,
+}
+
+pub enum Activation {
+    ReLU,
+    Sigmoid,
+    Softmax,
 }
 
 impl Linear {
-    pub fn new(shape: [usize; 2]) -> Self {
+    pub fn new(shape: [usize; 2], activation: Activation) -> Self {
         let mut weights = Tensor::new(shape.to_vec());
         let mut biases = Tensor::new(vec![shape[1]]);
         let weights_grad = Tensor::new(shape.to_vec());
@@ -22,6 +30,7 @@ impl Linear {
             biases,
             weights_grad,
             biases_grad,
+            activation,
         }
     }
 
@@ -29,7 +38,17 @@ impl Linear {
         let mut out = x.matmul_alloc(&self.weights);
         out.add_self(&self.biases);
 
-        out
+        self.activation(out)
+    }
+
+    fn activation(&self, mut x: Tensor) -> Tensor {
+        match self.activation {
+            Activation::ReLU => x.relu(),
+            Activation::Sigmoid => x.sigmoid(),
+            Activation::Softmax => x.softmax(),
+        }
+
+        x
     }
 
     pub fn optimize(&mut self, lr: f32) {

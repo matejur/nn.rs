@@ -1,11 +1,9 @@
-mod linear;
-mod network;
-mod tensor;
+use std::time::Instant;
 
-use linear::Linear;
-use network::NeuralNetwork;
+use nn::linear::{Activation, Linear};
+use nn::network::NeuralNetwork;
+use nn::tensor::Tensor;
 use rand::seq::SliceRandom;
-use tensor::Tensor;
 
 // TODO: Move this somewhere else
 fn mse(out: &Tensor, target: &Tensor) -> f32 {
@@ -28,7 +26,10 @@ fn cross_entropy(out: &Tensor, target: &Tensor) -> f32 {
 
 fn main() {
     let mut nn = NeuralNetwork::create(
-        vec![Linear::new([4, 8]), Linear::new([8, 3])],
+        vec![
+            Linear::new([4, 8], Activation::ReLU),
+            Linear::new([8, 3], Activation::Softmax),
+        ],
         cross_entropy,
     );
 
@@ -62,7 +63,7 @@ fn main() {
         let target_tensor = Tensor::from_array(vec![BATCH_SIZE, 3], &targets);
         batches.push((attrib_tensor, target_tensor));
     }
-
+;
     for epoch in 0..EPOCHS {
         let mut cost = 0.0;
         for i in 0..batches.len() - 1 {

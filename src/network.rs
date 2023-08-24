@@ -17,10 +17,8 @@ impl NeuralNetwork {
         let mut x = self.layers[0].forward(x);
 
         for layer in &self.layers[1..] {
-            x.relu();
             x = layer.forward(&x);
         }
-        x.softmax();
 
         x
     }
