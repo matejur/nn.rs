@@ -63,7 +63,8 @@ fn main() {
         let target_tensor = Tensor::from_array(vec![BATCH_SIZE, 3], &targets);
         batches.push((attrib_tensor, target_tensor));
     }
-;
+
+    let start = Instant::now();
     for epoch in 0..EPOCHS {
         let mut cost = 0.0;
         for i in 0..batches.len() - 1 {
@@ -85,6 +86,7 @@ fn main() {
         }
     }
 
+    println!("{:?}", start.elapsed());
     let out = nn.forward(&batches[batches.len() - 1].0);
     println!("Output: {:?}", out.argmax());
     println!("Target: {:?}", batches[batches.len() - 1].1.argmax());

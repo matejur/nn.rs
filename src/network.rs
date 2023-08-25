@@ -1,3 +1,5 @@
+use std::cell::Ref;
+
 use crate::{linear::Linear, tensor::Tensor};
 
 pub struct NeuralNetwork {
@@ -13,7 +15,7 @@ impl NeuralNetwork {
         }
     }
 
-    pub fn forward(&self, x: &Tensor) -> Tensor {
+    pub fn forward(&self, x: &Tensor) -> Ref<Tensor> {
         let mut x = self.layers[0].forward(x);
 
         for layer in &self.layers[1..] {

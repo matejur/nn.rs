@@ -1,3 +1,5 @@
+use std::cell::{Ref, RefCell};
+
 use crate::tensor::Tensor;
 
 pub struct Linear {
@@ -6,6 +8,7 @@ pub struct Linear {
     pub weights_grad: Tensor,
     pub biases_grad: Tensor,
 
+    output: RefCell<Option<Tensor>>,
     activation: Activation,
 }
 
@@ -31,24 +34,40 @@ impl Linear {
             weights_grad,
             biases_grad,
             activation,
+            output: None.into(),
         }
     }
 
-    pub fn forward(&self, x: &Tensor) -> Tensor {
-        let mut out = x.matmul_alloc(&self.weights);
-        out.add_self(&self.biases);
+    pub fn forward(&self, x: &Tensor) -> Ref<Tensor> {
+        {
+            let mut mut_borrow = self.output.borrow_mut();
+            if let Some(ref mut out) = *mut_borrow {
+                if out.shape == vec![x.shape[0], self.weights.shape[1]] {
+                    Tensor::matmul(out, &x, &self.weights);
+                } else {
+                    *mut_borrow = None;
+                }
+            }
 
-        self.activation(out)
+            if let None = *mut_borrow {
+                *mut_borrow = Some(x.matmul_alloc(&self.weights));
+            }
+
+            if let Some(ref mut out) = *mut_borrow {
+                out.add_self(&self.biases);
+                self.activation(out);
+            }
+        }
+
+        Ref::map(self.output.borrow(), |borrow| borrow.as_ref().unwrap())
     }
 
-    fn activation(&self, mut x: Tensor) -> Tensor {
+    fn activation(&self, x: &mut Tensor) {
         match self.activation {
             Activation::ReLU => x.relu(),
             Activation::Sigmoid => x.sigmoid(),
             Activation::Softmax => x.softmax(),
         }
-
-        x
     }
 
     pub fn optimize(&mut self, lr: f32) {
