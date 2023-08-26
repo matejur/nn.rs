@@ -1,21 +1,21 @@
 use std::cell::Ref;
 
-use crate::{linear::Linear, tensor::Tensor};
+use crate::{cost::CostFunction, linear::Linear, tensor::Tensor};
 
 pub struct NeuralNetwork {
     layers: Vec<Linear>,
-    cost_function: fn(&Tensor, &Tensor) -> f32,
+    cost_function: CostFunction,
 }
 
 impl NeuralNetwork {
-    pub fn create(layers: Vec<Linear>, cost_function: fn(&Tensor, &Tensor) -> f32) -> Self {
+    pub fn create(layers: Vec<Linear>, cost_function: CostFunction) -> Self {
         Self {
             layers,
             cost_function,
         }
     }
 
-    pub fn forward(&self, x: &Tensor) -> Ref<Tensor> {
+    pub fn predict(&self, x: &Tensor) -> Ref<Tensor> {
         let mut x = self.layers[0].forward(x);
 
         for layer in &self.layers[1..] {
@@ -23,6 +23,34 @@ impl NeuralNetwork {
         }
 
         x
+    }
+
+    pub fn backward(&mut self, input: &Tensor, gradient: &Tensor) {
+        // TODO: look at these clones??
+        let mut gradient = gradient.clone();
+        for layer_index in (1..self.layers.len()).rev() {
+            let (before, after) = self.layers.split_at_mut(layer_index);
+
+            let layer_input = before[layer_index - 1].get_output_reference();
+            gradient = after[0].backward(&layer_input, gradient);
+        }
+
+        self.layers[0].backward(&input, gradient);
+    }
+
+    pub fn train(&mut self, input: &Tensor, target: &Tensor, lr: f32) -> f32 {
+        // TODO: look at these clones??
+        let out = self.predict(input).clone();
+        let gradient = match self.cost_function {
+            CostFunction::CrossEntropy => out.sub_alloc(&target),
+            CostFunction::MeanSquaredError => todo!(),
+            CostFunction::SoftmaxCrossEntropy => out.sub_alloc(&target),
+        };
+
+        self.backward(input, &gradient);
+        self.optimize(lr);
+
+        self.cost_function.compute(&out, &target).sum() / input.shape[0] as f32
     }
 
     pub fn optimize(&mut self, lr: f32) {
@@ -47,8 +75,8 @@ impl NeuralNetwork {
     }
 
     pub fn cost_input_target(&self, x: &Tensor, target: &Tensor) -> f32 {
-        let out = self.forward(x);
-        (self.cost_function)(&out, &target)
+        let out = self.predict(x);
+        self.cost_function.compute(&out, &target).sum() / x.shape[0] as f32
     }
 
     // This function is a mess, was fighting with the borrow checker quite a lot...

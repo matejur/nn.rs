@@ -1,4 +1,5 @@
-use rand::Rng;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 
 #[derive(Debug)]
 pub struct Tensor {
@@ -35,7 +36,7 @@ impl Tensor {
     }
 
     pub fn randomize(&mut self) {
-        let mut rng = rand::thread_rng();
+        let mut rng = ChaCha8Rng::from_entropy();
         self.elems
             .iter_mut()
             .for_each(|x| *x = rng.gen::<f32>() * 2.0 - 1.0);
@@ -49,7 +50,7 @@ impl Tensor {
 
     pub fn matmul(out: &mut Self, a: &Self, b: &Self) {
         if out.shape[0] != a.shape[0]
-            && out.shape.iter().last().unwrap() != b.shape.iter().last().unwrap()
+            || out.shape.iter().last().unwrap() != b.shape.iter().last().unwrap()
         {
             todo!(
                 "Output shape doesn't match input shapes correctly! \n out={:?} a={:?} b={:?}",
@@ -97,6 +98,24 @@ impl Tensor {
         output
     }
 
+    pub fn transpose_alloc(&self) -> Tensor {
+        if self.shape.len() != 2 {
+            panic!("Currently only 2D tensor transpose implemented");
+        }
+
+        let mut out = Tensor::new(vec![self.shape[1], self.shape[0]]);
+
+        for i in 0..self.shape[0] {
+            for j in 0..self.shape[1] {
+                let i1 = i * self.shape[1] + j;
+                let i2 = j * self.shape[0] + i;
+                out.elems[i2] = self.elems[i1];
+            }
+        }
+
+        out
+    }
+
     pub fn square(&mut self) {
         self.elems.iter_mut().for_each(|x| *x = x.powi(2));
     }
@@ -106,8 +125,17 @@ impl Tensor {
             .iter_mut()
             .for_each(|x| *x = 1.0 / (1.0 + f32::exp(-*x)));
     }
+
+    pub fn sigmoid_derivative(&mut self) {
+        self.elems.iter_mut().for_each(|x| *x = *x * (1.0 - *x));
+    }
+
     pub fn relu(&mut self) {
         self.elems.iter_mut().for_each(|x| *x = x.max(0.0));
+    }
+
+    pub fn leaky_relu(&mut self, c: f32) {
+        self.elems.iter_mut().for_each(|x| *x = x.max(c * *x));
     }
 
     pub fn argmax(&self) -> Vec<usize> {
@@ -240,6 +268,15 @@ impl Tensor {
 impl PartialEq for Tensor {
     fn eq(&self, other: &Self) -> bool {
         self.shape == other.shape && self.elems == other.elems
+    }
+}
+
+impl Clone for Tensor {
+    fn clone(&self) -> Self {
+        Self {
+            shape: self.shape.clone(),
+            elems: self.elems.clone(),
+        }
     }
 }
 

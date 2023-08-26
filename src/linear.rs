@@ -14,8 +14,9 @@ pub struct Linear {
 
 pub enum Activation {
     ReLU,
+    LeakyReLU(f32),
     Sigmoid,
-    Softmax,
+    SoftmaxCrossEntropy,
 }
 
 impl Linear {
@@ -39,8 +40,11 @@ impl Linear {
     }
 
     pub fn forward(&self, x: &Tensor) -> Ref<Tensor> {
+        // New scope for output.borrow_mut(). Idk if this is the best
         {
             let mut mut_borrow = self.output.borrow_mut();
+
+            // If we already have output allocated and it's the right size
             if let Some(ref mut out) = *mut_borrow {
                 if out.shape == vec![x.shape[0], self.weights.shape[1]] {
                     Tensor::matmul(out, &x, &self.weights);
@@ -49,24 +53,66 @@ impl Linear {
                 }
             }
 
+            // Else we allocate new memory for the output
             if let None = *mut_borrow {
                 *mut_borrow = Some(x.matmul_alloc(&self.weights));
             }
 
+            // Add biases and activations
             if let Some(ref mut out) = *mut_borrow {
                 out.add_self(&self.biases);
                 self.activation(out);
             }
         }
 
-        Ref::map(self.output.borrow(), |borrow| borrow.as_ref().unwrap())
+        self.get_output_reference()
+    }
+
+    pub fn get_output_reference(&self) -> Ref<Tensor> {
+        Ref::map(self.output.borrow(), |borrow| {
+            borrow
+                .as_ref()
+                .expect("There is no output because the forward function was not called yet")
+        })
+    }
+
+    pub fn backward(&mut self, layer_input: &Tensor, mut gradient: Tensor) -> Tensor {
+        match self.activation {
+            Activation::ReLU => gradient.relu(),
+            Activation::Sigmoid => gradient.sigmoid_derivative(),
+            Activation::SoftmaxCrossEntropy => (),
+            Activation::LeakyReLU(c) => gradient.leaky_relu(c),
+        }
+
+        Tensor::matmul(
+            &mut self.weights_grad,
+            &layer_input.transpose_alloc(),
+            &gradient,
+        );
+
+        self.weights_grad
+            .elems
+            .iter_mut()
+            .for_each(|x| *x = *x / gradient.shape[0] as f32);
+
+        for j in 0..gradient.shape[1] {
+            let mut sum = 0.0;
+            for i in 0..gradient.shape[0] {
+                let index = i * gradient.shape[1] + j;
+                sum += gradient.elems[index];
+            }
+            self.biases_grad.elems[j] = sum / gradient.shape[0] as f32;
+        }
+
+        gradient.matmul_alloc(&self.weights.transpose_alloc())
     }
 
     fn activation(&self, x: &mut Tensor) {
         match self.activation {
             Activation::ReLU => x.relu(),
             Activation::Sigmoid => x.sigmoid(),
-            Activation::Softmax => x.softmax(),
+            Activation::SoftmaxCrossEntropy => x.softmax(),
+            Activation::LeakyReLU(c) => x.leaky_relu(c),
         }
     }
 

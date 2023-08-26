@@ -1,36 +1,24 @@
-use std::time::Instant;
-
+use nn::cost::CostFunction;
 use nn::linear::{Activation, Linear};
 use nn::network::NeuralNetwork;
 use nn::tensor::Tensor;
 use rand::seq::SliceRandom;
 
-// TODO: Move this somewhere else
-fn mse(out: &Tensor, target: &Tensor) -> f32 {
-    let mut diff = out.sub_alloc(&target);
-    diff.square();
-    diff.sum() / out.shape[0] as f32
-}
-
-fn cross_entropy(out: &Tensor, target: &Tensor) -> f32 {
-    let mut loss = 0.0;
-    for i in 0..out.elems.len() {
-        let e1 = target.elems[i].clamp(1e-5, 1.0 - 1e-5);
-        let e2 = out.elems[i].clamp(1e-5, 1.0 - 1e-5);
-        loss += e1 * e2.ln();
-        loss += (1.0 - e1) * (1.0 - e2).ln();
-    }
-
-    -loss / out.elems.len() as f32
-}
-
 fn main() {
-    let mut nn = NeuralNetwork::create(
+    let nn_finite_diff = NeuralNetwork::create(
         vec![
             Linear::new([4, 8], Activation::ReLU),
-            Linear::new([8, 3], Activation::Softmax),
+            Linear::new([8, 3], Activation::SoftmaxCrossEntropy),
         ],
-        cross_entropy,
+        CostFunction::CrossEntropy,
+    );
+
+    let mut nn_backprop = NeuralNetwork::create(
+        vec![
+            Linear::new([4, 8], Activation::LeakyReLU(0.1)),
+            Linear::new([8, 3], Activation::SoftmaxCrossEntropy),
+        ],
+        CostFunction::CrossEntropy,
     );
 
     let mut reader = csv::Reader::from_path("./datasets/iris.csv").unwrap();
@@ -38,7 +26,7 @@ fn main() {
     records.shuffle(&mut rand::thread_rng());
 
     const BATCH_SIZE: usize = 10;
-    const EPOCHS: usize = 2000;
+    const EPOCHS: usize = 20000;
 
     let mut batches: Vec<(Tensor, Tensor)> = Vec::new();
     for batch in records.chunks_exact(BATCH_SIZE) {
@@ -46,10 +34,10 @@ fn main() {
         let mut targets: Vec<f32> = Vec::new();
 
         for sample in batch {
-            attribs.push(sample[0].parse().unwrap());
-            attribs.push(sample[1].parse().unwrap());
-            attribs.push(sample[2].parse().unwrap());
-            attribs.push(sample[3].parse().unwrap());
+            attribs.push(sample[0].parse::<f32>().unwrap() / 10.0);
+            attribs.push(sample[1].parse::<f32>().unwrap() / 10.0);
+            attribs.push(sample[2].parse::<f32>().unwrap() / 10.0);
+            attribs.push(sample[3].parse::<f32>().unwrap() / 10.0);
 
             match &sample[4] {
                 "Setosa" => targets.extend([1.0, 0.0, 0.0].iter()),
@@ -64,30 +52,25 @@ fn main() {
         batches.push((attrib_tensor, target_tensor));
     }
 
-    let start = Instant::now();
     for epoch in 0..EPOCHS {
         let mut cost = 0.0;
         for i in 0..batches.len() - 1 {
             let input = &batches[i].0;
             let target = &batches[i].1;
 
-            nn.gradient_finite_difference(&input, &target, 1e-6);
-            nn.optimize(0.01);
+            cost += nn_backprop.train(&input, &target, 0.001);
 
-            let out = nn.forward(&input);
-            cost += cross_entropy(&out, &target);
+            if cost.is_nan() {
+                panic!();
+            }
         }
 
         cost /= (batches.len() - 1) as f32;
 
-        println!("Epoch: {epoch} Cost: {cost}",);
-        if cost < 1e-2 {
-            break;
-        }
+        println!("Epoch: {epoch} cost: {cost}");
     }
 
-    println!("{:?}", start.elapsed());
-    let out = nn.forward(&batches[batches.len() - 1].0);
+    let out = nn_backprop.predict(&batches[batches.len() - 1].0);
     println!("Output: {:?}", out.argmax());
     println!("Target: {:?}", batches[batches.len() - 1].1.argmax());
 }
