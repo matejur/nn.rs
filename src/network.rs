@@ -25,13 +25,11 @@ impl NeuralNetwork {
         x
     }
 
-    pub fn backward(&mut self, input: &Tensor, gradient: &Tensor) {
-        // TODO: look at these clones??
-        let mut gradient = gradient.clone();
+    pub fn backward(&mut self, input: &Tensor, mut gradient: Tensor) {
         for layer_index in (1..self.layers.len()).rev() {
             let (before, after) = self.layers.split_at_mut(layer_index);
 
-            let layer_input = before[layer_index - 1].get_output_reference();
+            let layer_input = before[layer_index - 1].get_activations_reference();
             gradient = after[0].backward(&layer_input, gradient);
         }
 
@@ -43,14 +41,14 @@ impl NeuralNetwork {
         let out = self.predict(input).clone();
         let gradient = match self.cost_function {
             CostFunction::CrossEntropy => out.sub_alloc(&target),
-            CostFunction::MeanSquaredError => todo!(),
+            CostFunction::MeanSquaredError => out.sub_alloc(&target),
             CostFunction::SoftmaxCrossEntropy => out.sub_alloc(&target),
         };
 
-        self.backward(input, &gradient);
+        self.backward(&input, gradient);
         self.optimize(lr);
 
-        self.cost_function.compute(&out, &target).sum() / input.shape[0] as f32
+        self.cost_function.compute(&out, &target)
     }
 
     pub fn optimize(&mut self, lr: f32) {
@@ -76,7 +74,7 @@ impl NeuralNetwork {
 
     pub fn cost_input_target(&self, x: &Tensor, target: &Tensor) -> f32 {
         let out = self.predict(x);
-        self.cost_function.compute(&out, &target).sum() / x.shape[0] as f32
+        self.cost_function.compute(&out, &target)
     }
 
     // This function is a mess, was fighting with the borrow checker quite a lot...

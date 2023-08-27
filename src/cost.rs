@@ -7,31 +7,38 @@ pub enum CostFunction {
 }
 
 impl CostFunction {
-    pub fn compute(&self, out: &Tensor, target: &Tensor) -> Tensor {
+    pub fn compute(&self, out: &Tensor, target: &Tensor) -> f32 {
         match self {
             CostFunction::CrossEntropy => cross_entropy(out, target),
             CostFunction::SoftmaxCrossEntropy => todo!(),
-            CostFunction::MeanSquaredError => todo!(),
+            CostFunction::MeanSquaredError => mse(out, target),
         }
     }
 }
 
-// fn mse(out: &Tensor, target: &Tensor) -> f32 {
-//     let mut diff = out.sub_alloc(&target);
-//     diff.square();
-//     diff.sum() / out.shape[0] as f32
-// }
+fn mse(out: &Tensor, target: &Tensor) -> f32 {
+    let mut diff = out.sub_alloc(&target);
+    diff.square();
+    diff.sum() / (2.0 * out.shape[0] as f32)
+}
 
-fn cross_entropy(out: &Tensor, target: &Tensor) -> Tensor {
-    let mut loss = Tensor::new(out.shape.to_owned());
+fn cross_entropy(out: &Tensor, target: &Tensor) -> f32 {
+    if out.shape != target.shape {
+        panic!(
+            "Loss calculation requires both tensors to be of same shape. Got: {:?} {:?}",
+            out.shape, target.shape
+        );
+    }
+
+    let mut loss = 0.0;
     for i in 0..out.shape[0] {
         for j in 0..out.shape[1] {
             let index = i * out.shape[1] + j;
             let e1 = target.elems[index];
             let e2 = out.elems[index].clamp(1e-5, 1.0 - 1e-5);
-            loss.elems[index] = -e1 * e2.ln();
+            loss += -e1 * e2.ln();
         }
     }
 
-    loss
+    loss / out.shape[0] as f32
 }

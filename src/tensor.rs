@@ -35,8 +35,17 @@ impl Tensor {
         }
     }
 
+    pub fn set_data(&mut self, elems: &[f32]) {
+        if elems.len() != self.elems.len() {
+            panic!("New elements must be the same length as the old elems!");
+        }
+
+        self.elems.copy_from_slice(elems);
+    }
+
     pub fn randomize(&mut self) {
         let mut rng = ChaCha8Rng::from_entropy();
+        //let mut rng = ChaCha8Rng::seed_from_u64(42);
         self.elems
             .iter_mut()
             .for_each(|x| *x = rng.gen::<f32>() * 2.0 - 1.0);
@@ -127,6 +136,7 @@ impl Tensor {
     }
 
     pub fn sigmoid_derivative(&mut self) {
+        self.sigmoid();
         self.elems.iter_mut().for_each(|x| *x = *x * (1.0 - *x));
     }
 
@@ -136,6 +146,17 @@ impl Tensor {
 
     pub fn leaky_relu(&mut self, c: f32) {
         self.elems.iter_mut().for_each(|x| *x = x.max(c * *x));
+    }
+
+    pub fn elementwise_multiply(&mut self, other: &Self) {
+        if self.shape != other.shape {
+            panic!("Can only elementwise multiply tensors of same shape!");
+        }
+
+        self.elems
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, x)| *x = *x * other.elems[i]);
     }
 
     pub fn argmax(&self) -> Vec<usize> {
@@ -178,6 +199,10 @@ impl Tensor {
 
     pub fn sum(&self) -> f32 {
         self.elems.iter().sum()
+    }
+
+    pub fn scalar_multiply(&mut self, s: f32) {
+        self.elems.iter_mut().for_each(|x| *x = s * *x);
     }
 
     pub fn add(out: &mut Self, a: &Self, b: &Self) {

@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use nn::cost::CostFunction;
 use nn::linear::{Activation, Linear};
 use nn::network::NeuralNetwork;
@@ -5,7 +7,7 @@ use nn::tensor::Tensor;
 use rand::seq::SliceRandom;
 
 fn main() {
-    let nn_finite_diff = NeuralNetwork::create(
+    let mut nn_finite_diff = NeuralNetwork::create(
         vec![
             Linear::new([4, 8], Activation::ReLU),
             Linear::new([8, 3], Activation::SoftmaxCrossEntropy),
@@ -15,7 +17,7 @@ fn main() {
 
     let mut nn_backprop = NeuralNetwork::create(
         vec![
-            Linear::new([4, 8], Activation::LeakyReLU(0.1)),
+            Linear::new([4, 8], Activation::ReLU),
             Linear::new([8, 3], Activation::SoftmaxCrossEntropy),
         ],
         CostFunction::CrossEntropy,
@@ -26,7 +28,7 @@ fn main() {
     records.shuffle(&mut rand::thread_rng());
 
     const BATCH_SIZE: usize = 10;
-    const EPOCHS: usize = 20000;
+    const EPOCHS: usize = 1000;
 
     let mut batches: Vec<(Tensor, Tensor)> = Vec::new();
     for batch in records.chunks_exact(BATCH_SIZE) {
@@ -52,25 +54,34 @@ fn main() {
         batches.push((attrib_tensor, target_tensor));
     }
 
+    let start = Instant::now();
     for epoch in 0..EPOCHS {
-        let mut cost = 0.0;
+        let mut cost_backprop = 0.0;
+        let mut cost_finite = 0.0;
         for i in 0..batches.len() - 1 {
             let input = &batches[i].0;
             let target = &batches[i].1;
 
-            cost += nn_backprop.train(&input, &target, 0.001);
+            cost_backprop += nn_backprop.train(&input, &target, 0.01);
 
-            if cost.is_nan() {
-                panic!();
-            }
+            nn_finite_diff.gradient_finite_difference(&input, &target, 1e-4);
+            nn_finite_diff.optimize(0.01);
+            cost_finite += nn_finite_diff.cost_input_target(&input, &target);
         }
 
-        cost /= (batches.len() - 1) as f32;
+        cost_backprop /= (batches.len() - 1) as f32;
+        cost_finite /= (batches.len() - 1) as f32;
 
-        println!("Epoch: {epoch} cost: {cost}");
+        println!("Epoch: {epoch} cost_backprop: {cost_backprop} cost_finite: {cost_finite}");
     }
 
+    println!("{:?}", start.elapsed());
     let out = nn_backprop.predict(&batches[batches.len() - 1].0);
-    println!("Output: {:?}", out.argmax());
-    println!("Target: {:?}", batches[batches.len() - 1].1.argmax());
+    println!("Output backprop: {:?}", out.argmax());
+    let out = nn_finite_diff.predict(&batches[batches.len() - 1].0);
+    println!("Output finite:   {:?}", out.argmax());
+    println!(
+        "Target:          {:?}",
+        batches[batches.len() - 1].1.argmax()
+    );
 }

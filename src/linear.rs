@@ -8,19 +8,23 @@ pub struct Linear {
     pub weights_grad: Tensor,
     pub biases_grad: Tensor,
 
-    output: RefCell<Option<Tensor>>,
-    activation: Activation,
+    pub activation_function: Activation,
+
+    intermediates: RefCell<Option<Tensor>>,
+    activations: RefCell<Option<Tensor>>,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum Activation {
     ReLU,
     LeakyReLU(f32),
     Sigmoid,
     SoftmaxCrossEntropy,
+    None,
 }
 
 impl Linear {
-    pub fn new(shape: [usize; 2], activation: Activation) -> Self {
+    pub fn new(shape: [usize; 2], activation_function: Activation) -> Self {
         let mut weights = Tensor::new(shape.to_vec());
         let mut biases = Tensor::new(vec![shape[1]]);
         let weights_grad = Tensor::new(shape.to_vec());
@@ -34,85 +38,111 @@ impl Linear {
             biases,
             weights_grad,
             biases_grad,
-            activation,
-            output: None.into(),
+            activation_function,
+            intermediates: None.into(),
+            activations: None.into(),
         }
+    }
+
+    pub fn set_weights(&mut self, elems: &[f32]) {
+        self.weights.set_data(elems);
+    }
+
+    pub fn set_biases(&mut self, elems: &[f32]) {
+        self.biases.set_data(elems);
     }
 
     pub fn forward(&self, x: &Tensor) -> Ref<Tensor> {
         // New scope for output.borrow_mut(). Idk if this is the best
         {
-            let mut mut_borrow = self.output.borrow_mut();
-
-            // If we already have output allocated and it's the right size
-            if let Some(ref mut out) = *mut_borrow {
-                if out.shape == vec![x.shape[0], self.weights.shape[1]] {
-                    Tensor::matmul(out, &x, &self.weights);
+            let mut intermediates_borrow = self.intermediates.borrow_mut();
+            if let Some(ref mut inter) = *intermediates_borrow {
+                if inter.shape == vec![x.shape[0], self.weights.shape[1]] {
+                    Tensor::matmul(inter, x, &self.weights);
+                    inter.add_self(&self.biases);
                 } else {
-                    *mut_borrow = None;
+                    *intermediates_borrow = None;
                 }
             }
 
             // Else we allocate new memory for the output
-            if let None = *mut_borrow {
-                *mut_borrow = Some(x.matmul_alloc(&self.weights));
+            if let None = *intermediates_borrow {
+                let mut inter = x.matmul_alloc(&self.weights);
+                inter.add_self(&self.biases);
+                *intermediates_borrow = Some(inter);
             }
 
-            // Add biases and activations
-            if let Some(ref mut out) = *mut_borrow {
-                out.add_self(&self.biases);
-                self.activation(out);
+            let mut activations_borrow = self.activations.borrow_mut();
+            if let Some(ref mut act) = *activations_borrow {
+                if act.shape == intermediates_borrow.as_ref().unwrap().shape {
+                    act.set_data(&intermediates_borrow.as_ref().unwrap().elems);
+                    self.activate(act);
+                } else {
+                    *activations_borrow = None;
+                }
+            }
+
+            if let None = *activations_borrow {
+                let mut act = Tensor::from_array(
+                    intermediates_borrow.as_ref().unwrap().shape.to_owned(),
+                    &intermediates_borrow.as_ref().unwrap().elems,
+                );
+                self.activate(&mut act);
+                *activations_borrow = Some(act);
             }
         }
 
-        self.get_output_reference()
+        self.get_activations_reference()
     }
 
-    pub fn get_output_reference(&self) -> Ref<Tensor> {
-        Ref::map(self.output.borrow(), |borrow| {
+    pub fn get_activations_reference(&self) -> Ref<Tensor> {
+        Ref::map(self.activations.borrow(), |borrow| {
             borrow
                 .as_ref()
                 .expect("There is no output because the forward function was not called yet")
         })
     }
 
-    pub fn backward(&mut self, layer_input: &Tensor, mut gradient: Tensor) -> Tensor {
-        match self.activation {
-            Activation::ReLU => gradient.relu(),
-            Activation::Sigmoid => gradient.sigmoid_derivative(),
+    pub fn backward(&mut self, inputs: &Tensor, mut gradient: Tensor) -> Tensor {
+        let mut binding = self.intermediates.borrow_mut();
+        let intermediates = binding.as_mut().unwrap();
+
+        match self.activation_function {
+            Activation::ReLU => gradient
+                .elems
+                .iter_mut()
+                .enumerate()
+                .for_each(|(i, x)| *x = if intermediates.elems[i] > 0.0 { *x } else { 0.0 }),
+            Activation::LeakyReLU(_) => todo!(),
+            Activation::Sigmoid => gradient.elementwise_multiply(&intermediates),
             Activation::SoftmaxCrossEntropy => (),
-            Activation::LeakyReLU(c) => gradient.leaky_relu(c),
+            Activation::None => todo!(),
         }
 
-        Tensor::matmul(
-            &mut self.weights_grad,
-            &layer_input.transpose_alloc(),
-            &gradient,
-        );
+        Tensor::matmul(&mut self.weights_grad, &inputs.transpose_alloc(), &gradient);
 
         self.weights_grad
-            .elems
-            .iter_mut()
-            .for_each(|x| *x = *x / gradient.shape[0] as f32);
+            .scalar_multiply(1.0 / gradient.shape[0] as f32);
 
-        for j in 0..gradient.shape[1] {
+        for bias_index in 0..self.biases.shape[0] {
             let mut sum = 0.0;
-            for i in 0..gradient.shape[0] {
-                let index = i * gradient.shape[1] + j;
+            for sample in 0..gradient.shape[0] {
+                let index = sample * gradient.shape[1] + bias_index;
                 sum += gradient.elems[index];
             }
-            self.biases_grad.elems[j] = sum / gradient.shape[0] as f32;
+            self.biases_grad.elems[bias_index] = sum / gradient.shape[0] as f32;
         }
 
         gradient.matmul_alloc(&self.weights.transpose_alloc())
     }
 
-    fn activation(&self, x: &mut Tensor) {
-        match self.activation {
+    fn activate(&self, x: &mut Tensor) {
+        match self.activation_function {
             Activation::ReLU => x.relu(),
             Activation::Sigmoid => x.sigmoid(),
             Activation::SoftmaxCrossEntropy => x.softmax(),
             Activation::LeakyReLU(c) => x.leaky_relu(c),
+            Activation::None => (),
         }
     }
 
