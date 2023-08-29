@@ -37,6 +37,7 @@ fn cross_entropy(out: &Tensor, target: &Tensor) -> f32 {
             let e1 = target.elems[index];
             let e2 = out.elems[index].clamp(1e-5, 1.0 - 1e-5);
             loss += -e1 * e2.ln();
+            loss += -(1.0 - e1) * (1.0 - e2).ln();
         }
     }
 

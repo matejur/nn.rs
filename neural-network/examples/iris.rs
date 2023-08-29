@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use nn::cost::CostFunction;
 use nn::linear::{Activation, Linear};
 use nn::network::NeuralNetwork;
@@ -54,7 +52,6 @@ fn main() {
         batches.push((attrib_tensor, target_tensor));
     }
 
-    let start = Instant::now();
     for epoch in 0..EPOCHS {
         let mut cost_backprop = 0.0;
         let mut cost_finite = 0.0;
@@ -75,7 +72,6 @@ fn main() {
         println!("Epoch: {epoch} cost_backprop: {cost_backprop} cost_finite: {cost_finite}");
     }
 
-    println!("{:?}", start.elapsed());
     let out = nn_backprop.predict(&batches[batches.len() - 1].0);
     println!("Output backprop: {:?}", out.argmax());
     let out = nn_finite_diff.predict(&batches[batches.len() - 1].0);
