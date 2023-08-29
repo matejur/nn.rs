@@ -107,23 +107,36 @@ impl Linear {
         let mut binding = self.intermediates.borrow_mut();
         let intermediates = binding.as_mut().unwrap();
 
+        // Elementwise multiply the gradient with the activation function derivative with respect to z
         match self.activation_function {
-            Activation::ReLU => gradient
-                .elems
-                .iter_mut()
-                .enumerate()
-                .for_each(|(i, x)| *x = if intermediates.elems[i] > 0.0 { *x } else { 0.0 }),
-            Activation::LeakyReLU(_) => todo!(),
-            Activation::Sigmoid => gradient.elementwise_multiply(&intermediates),
+            Activation::ReLU => gradient.elems.iter_mut().enumerate().for_each(|(i, x)| {
+                *x = if intermediates.elems[i] > 0.0 {
+                    *x
+                } else {
+                    0.0
+                }
+            }),
+            Activation::LeakyReLU(c) => gradient.elems.iter_mut().enumerate().for_each(|(i, x)| {
+                *x = if intermediates.elems[i] > 0.0 {
+                    *x
+                } else {
+                    c * *x
+                }
+            }),
+            Activation::Sigmoid => {
+                intermediates.sigmoid_derivative();
+                gradient.elementwise_multiply(&intermediates)
+            }
             Activation::SoftmaxCrossEntropy => (),
-            Activation::None => todo!(),
+            Activation::None => (),
         }
 
+        // Calculate deltas
         Tensor::matmul(&mut self.weights_grad, &inputs.transpose_alloc(), &gradient);
-
         self.weights_grad
             .scalar_multiply(1.0 / gradient.shape[0] as f32);
 
+        // Calculate bias deltas
         for bias_index in 0..self.biases.shape[0] {
             let mut sum = 0.0;
             for sample in 0..gradient.shape[0] {
@@ -133,6 +146,7 @@ impl Linear {
             self.biases_grad.elems[bias_index] = sum / gradient.shape[0] as f32;
         }
 
+        // Propagate
         gradient.matmul_alloc(&self.weights.transpose_alloc())
     }
 

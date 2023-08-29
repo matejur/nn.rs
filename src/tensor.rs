@@ -150,7 +150,10 @@ impl Tensor {
 
     pub fn elementwise_multiply(&mut self, other: &Self) {
         if self.shape != other.shape {
-            panic!("Can only elementwise multiply tensors of same shape!");
+            panic!(
+                "Can only elementwise multiply tensors of same shape. Got {:?} and {:?}",
+                self.shape, other.shape
+            );
         }
 
         self.elems
