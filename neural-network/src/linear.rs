@@ -2,33 +2,43 @@ use std::cell::{Ref, RefCell};
 
 use crate::tensor::Tensor;
 
+#[derive(Debug, Default)]
+pub struct LayerData {
+    pub input_channels: usize,
+    pub output_channels: usize,
+    pub activation_function: Activation,
+}
+
 pub struct Linear {
     pub weights: Tensor,
     pub biases: Tensor,
     pub weights_grad: Tensor,
     pub biases_grad: Tensor,
 
-    pub activation_function: Activation,
+    data: LayerData,
 
     intermediates: RefCell<Option<Tensor>>,
     activations: RefCell<Option<Tensor>>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum Activation {
+    #[default]
+    None,
     ReLU,
     LeakyReLU(f32),
     Sigmoid,
     SoftmaxCrossEntropy,
-    None,
 }
 
+//impl Default for Activation
+
 impl Linear {
-    pub fn new(shape: [usize; 2], activation_function: Activation) -> Self {
-        let mut weights = Tensor::new(shape.to_vec());
-        let mut biases = Tensor::new(vec![shape[1]]);
-        let weights_grad = Tensor::new(shape.to_vec());
-        let biases_grad = Tensor::new(vec![shape[1]]);
+    pub fn from_layer_data(data: LayerData) -> Self {
+        let mut weights = Tensor::new(vec![data.input_channels, data.output_channels]);
+        let mut biases = Tensor::new(vec![data.output_channels]);
+        let weights_grad = Tensor::new(vec![data.input_channels, data.output_channels]);
+        let biases_grad = Tensor::new(vec![data.output_channels]);
 
         weights.randomize();
         biases.randomize();
@@ -38,10 +48,28 @@ impl Linear {
             biases,
             weights_grad,
             biases_grad,
-            activation_function,
+            data,
             intermediates: None.into(),
             activations: None.into(),
         }
+    }
+
+    pub fn new(shape: [usize; 2], activation: Activation) -> Self {
+        let data = LayerData {
+            input_channels: shape[0],
+            output_channels: shape[1],
+            activation_function: activation,
+        };
+
+        Linear::from_layer_data(data)
+    }
+
+    pub fn get_input_channels(&self) -> usize {
+        self.data.input_channels
+    }
+
+    pub fn get_output_channels(&self) -> usize {
+        self.data.output_channels
     }
 
     pub fn set_weights(&mut self, elems: &[f32]) {
@@ -108,7 +136,7 @@ impl Linear {
         let intermediates = binding.as_mut().unwrap();
 
         // Elementwise multiply the gradient with the activation function derivative with respect to z
-        match self.activation_function {
+        match self.data.activation_function {
             Activation::ReLU => gradient.elems.iter_mut().enumerate().for_each(|(i, x)| {
                 *x = if intermediates.elems[i] > 0.0 {
                     *x
@@ -151,7 +179,7 @@ impl Linear {
     }
 
     fn activate(&self, x: &mut Tensor) {
-        match self.activation_function {
+        match self.data.activation_function {
             Activation::ReLU => x.relu(),
             Activation::Sigmoid => x.sigmoid(),
             Activation::SoftmaxCrossEntropy => x.softmax(),

@@ -71,9 +71,9 @@ impl Tensor {
 
         out.elems.fill(0 as f32);
 
-        let size_out_first = *out.shape.iter().next().unwrap();
-        let size_out_last = *out.shape.iter().last().unwrap();
-        let size_between = *b.shape.iter().next().unwrap();
+        let size_out_first = *out.shape.first().unwrap();
+        let size_out_last = *out.shape.last().unwrap();
+        let size_between = *b.shape.first().unwrap();
 
         for i in 0..size_out_first {
             for k in 0..size_between {
