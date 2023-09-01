@@ -1,16 +1,15 @@
 use crate::tensor::Tensor;
 
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum CostFunction {
     CrossEntropy,
     MeanSquaredError,
-    SoftmaxCrossEntropy,
 }
 
 impl CostFunction {
     pub fn compute(&self, out: &Tensor, target: &Tensor) -> f32 {
         match self {
             CostFunction::CrossEntropy => cross_entropy(out, target),
-            CostFunction::SoftmaxCrossEntropy => todo!(),
             CostFunction::MeanSquaredError => mse(out, target),
         }
     }

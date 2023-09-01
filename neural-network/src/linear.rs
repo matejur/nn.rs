@@ -2,13 +2,14 @@ use std::cell::{Ref, RefCell};
 
 use crate::tensor::Tensor;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct LayerData {
     pub input_channels: usize,
     pub output_channels: usize,
     pub activation_function: Activation,
 }
 
+#[derive(Debug)]
 pub struct Linear {
     pub weights: Tensor,
     pub biases: Tensor,
@@ -21,12 +22,11 @@ pub struct Linear {
     activations: RefCell<Option<Tensor>>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Hash)]
 pub enum Activation {
     #[default]
     None,
     ReLU,
-    LeakyReLU(f32),
     Sigmoid,
     SoftmaxCrossEntropy,
 }
@@ -52,6 +52,10 @@ impl Linear {
             intermediates: None.into(),
             activations: None.into(),
         }
+    }
+
+    pub fn get_layer_data(&self) -> &LayerData {
+        &self.data
     }
 
     pub fn new(shape: [usize; 2], activation: Activation) -> Self {
@@ -144,13 +148,6 @@ impl Linear {
                     0.0
                 }
             }),
-            Activation::LeakyReLU(c) => gradient.elems.iter_mut().enumerate().for_each(|(i, x)| {
-                *x = if intermediates.elems[i] > 0.0 {
-                    *x
-                } else {
-                    c * *x
-                }
-            }),
             Activation::Sigmoid => {
                 intermediates.sigmoid_derivative();
                 gradient.elementwise_multiply(&intermediates)
@@ -183,7 +180,6 @@ impl Linear {
             Activation::ReLU => x.relu(),
             Activation::Sigmoid => x.sigmoid(),
             Activation::SoftmaxCrossEntropy => x.softmax(),
-            Activation::LeakyReLU(c) => x.leaky_relu(c),
             Activation::None => (),
         }
     }

@@ -42,7 +42,6 @@ impl NeuralNetwork {
         let gradient = match self.cost_function {
             CostFunction::CrossEntropy => out.sub_alloc(&target),
             CostFunction::MeanSquaredError => out.sub_alloc(&target),
-            CostFunction::SoftmaxCrossEntropy => out.sub_alloc(&target),
         };
 
         self.backward(&input, gradient);
@@ -70,6 +69,10 @@ impl NeuralNetwork {
                 layer.weights_grad, layer.biases_grad
             );
         }
+    }
+
+    pub fn get_layers(&self) -> &Vec<Linear> {
+        &self.layers
     }
 
     pub fn cost_input_target(&self, x: &Tensor, target: &Tensor) -> f32 {
