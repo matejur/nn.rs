@@ -33,21 +33,21 @@ impl NeuralNetwork {
             gradient = after[0].backward(&layer_input, gradient);
         }
 
-        self.layers[0].backward(&input, gradient);
+        self.layers[0].backward(input, gradient);
     }
 
     pub fn train(&mut self, input: &Tensor, target: &Tensor, lr: f32) -> f32 {
         // TODO: look at these clones??
         let out = self.predict(input).clone();
         let gradient = match self.cost_function {
-            CostFunction::CrossEntropy => out.sub_alloc(&target),
-            CostFunction::MeanSquaredError => out.sub_alloc(&target),
+            CostFunction::CrossEntropy => out.sub_alloc(target),
+            CostFunction::MeanSquaredError => out.sub_alloc(target),
         };
 
-        self.backward(&input, gradient);
+        self.backward(input, gradient);
         self.optimize(lr);
 
-        self.cost_function.compute(&out, &target)
+        self.cost_function.compute(&out, target)
     }
 
     pub fn optimize(&mut self, lr: f32) {
@@ -77,7 +77,7 @@ impl NeuralNetwork {
 
     pub fn cost_input_target(&self, x: &Tensor, target: &Tensor) -> f32 {
         let out = self.predict(x);
-        self.cost_function.compute(&out, &target)
+        self.cost_function.compute(&out, target)
     }
 
     // This function is a mess, was fighting with the borrow checker quite a lot...

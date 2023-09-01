@@ -98,7 +98,7 @@ impl Linear {
             }
 
             // Else we allocate new memory for the output
-            if let None = *intermediates_borrow {
+            if intermediates_borrow.is_none() {
                 let mut inter = x.matmul_alloc(&self.weights);
                 inter.add_self(&self.biases);
                 *intermediates_borrow = Some(inter);
@@ -114,7 +114,7 @@ impl Linear {
                 }
             }
 
-            if let None = *activations_borrow {
+            if activations_borrow.is_none() {
                 let mut act = Tensor::from_array(
                     intermediates_borrow.as_ref().unwrap().shape.to_owned(),
                     &intermediates_borrow.as_ref().unwrap().elems,
@@ -150,7 +150,7 @@ impl Linear {
             }),
             Activation::Sigmoid => {
                 intermediates.sigmoid_derivative();
-                gradient.elementwise_multiply(&intermediates)
+                gradient.elementwise_multiply(intermediates)
             }
             Activation::SoftmaxCrossEntropy => (),
             Activation::None => (),

@@ -16,7 +16,7 @@ impl CostFunction {
 }
 
 fn mse(out: &Tensor, target: &Tensor) -> f32 {
-    let mut diff = out.sub_alloc(&target);
+    let mut diff = out.sub_alloc(target);
     diff.square();
     diff.sum() / (2.0 * out.shape[0] as f32)
 }

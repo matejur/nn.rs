@@ -24,6 +24,9 @@ pub struct App {
     cost_function: CostFunction,
     neural_network: Option<NeuralNetwork>,
     auto_update: bool,
+
+    low_color: Color32,
+    high_color: Color32,
 }
 
 impl Default for App {
@@ -33,6 +36,8 @@ impl Default for App {
             neural_network: None,
             cost_function: CostFunction::CrossEntropy,
             auto_update: true,
+            low_color: Color32::RED,
+            high_color: Color32::BLUE,
         }
     }
 }
@@ -123,7 +128,7 @@ impl App {
 
         ui.group(|ui| {
             ui.label("Cost function: ");
-            egui::ComboBox::from_id_source(format!("cost_function_selector"))
+            egui::ComboBox::from_id_source("cost_function_selector")
                 .selected_text(format!("{:?}", self.cost_function))
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
@@ -152,10 +157,116 @@ impl App {
             }
         });
     }
+
+    fn visualize_network(&self, ui: &mut egui::Ui) {
+        if let Some(network) = &self.neural_network {
+            let painter = ui.painter();
+
+            let Vec2 {
+                x: width,
+                y: height,
+            } = ui.available_size();
+
+            let margin_lr = 100.0;
+            let margin_ud = 50.0;
+
+            let layers = network.get_layers();
+            let columns = layers.len() + 1;
+            let column_spacing = (width - 2.0 * margin_lr) / (columns - 1) as f32;
+
+            let number_of_inputs = layers[0].get_input_channels();
+            let available_height = height - 2.0 * margin_ud;
+            let row_spacing = available_height / (number_of_inputs as f32);
+
+            // Draw all weights
+            for (index, layer) in layers.iter().enumerate() {
+                let number_of_inputs = layer.get_input_channels();
+                let number_of_neurons = layer.get_output_channels();
+                let current_row_spacing = available_height / (number_of_neurons as f32);
+                let previous_row_spacing = available_height / (number_of_inputs as f32);
+
+                for neuron_index in 0..number_of_neurons {
+                    for input_index in 0..number_of_inputs {
+                        let weight_index = neuron_index * number_of_inputs + input_index;
+                        let weight = layer.weights.elems[weight_index];
+                        let weight_sigmoid = 1.0 / (1.0 + (-weight).exp());
+
+                        let color =
+                            interpolate_color(self.low_color, self.high_color, weight_sigmoid);
+
+                        painter.add(Shape::LineSegment {
+                            points: [
+                                Pos2 {
+                                    x: margin_lr + (index + 1) as f32 * column_spacing,
+                                    y: margin_ud
+                                        + (neuron_index as f32 + 0.5) * current_row_spacing,
+                                },
+                                Pos2 {
+                                    x: margin_lr + index as f32 * column_spacing,
+                                    y: margin_ud
+                                        + (input_index as f32 + 0.5) * previous_row_spacing,
+                                },
+                            ],
+                            stroke: Stroke {
+                                width: 2.0,
+                                color,
+                            },
+                        });
+                    }
+                }
+            }
+
+            // Draw neurons on top
+            for inp_index in 0..number_of_inputs {
+                painter.add(Shape::Circle(CircleShape {
+                    radius: 15.0,
+                    center: Pos2 {
+                        x: margin_lr,
+                        y: margin_ud + (inp_index as f32 + 0.5) * row_spacing,
+                    },
+                    fill: Color32::LIGHT_GRAY,
+                    stroke: Stroke::default(),
+                }));
+            }
+
+            for (index, layer) in layers.iter().enumerate() {
+                let number_of_neurons = layer.get_output_channels();
+                let current_row_spacing = available_height / (number_of_neurons as f32);
+
+                for neuron_index in 0..number_of_neurons {
+                    let bias = layer.biases.elems[neuron_index];
+                    let bias_sigmoid = 1.0 / (1.0 + (-bias).exp());
+
+                    let color = interpolate_color(self.low_color, self.high_color, bias_sigmoid);
+
+                    painter.add(Shape::Circle(CircleShape {
+                        radius: 15.0,
+                        center: Pos2 {
+                            x: margin_lr + (index + 1) as f32 * column_spacing,
+                            y: margin_ud + (neuron_index as f32 + 0.5) * current_row_spacing,
+                        },
+                        fill: color,
+                        stroke: Stroke::default(),
+                    }));
+                }
+            }
+        }
+    }
+
+    fn visual_config(&mut self, ui: &mut egui::Ui) {
+        ui.group(|ui| {
+            ui.horizontal(|ui| {
+                ui.label("Low color: ");
+                ui.color_edit_button_srgba(&mut self.low_color);
+                ui.label("High color: ");
+                ui.color_edit_button_srgba(&mut self.high_color);
+            });
+        });
+    }
 }
 
 fn create_network(
-    layer_info: &Vec<(usize, Activation)>,
+    layer_info: &[(usize, Activation)],
     cost_function: CostFunction,
 ) -> NeuralNetwork {
     let layers = to_layer_data(layer_info)
@@ -165,16 +276,15 @@ fn create_network(
     NeuralNetwork::create(layers, cost_function)
 }
 
-fn to_layer_data(input: &Vec<(usize, Activation)>) -> Vec<LayerData> {
+fn to_layer_data(input: &[(usize, Activation)]) -> Vec<LayerData> {
     let mut out = Vec::new();
-    let mut data = LayerData::default();
-    data.input_channels = input[0].0;
+    let mut data = LayerData { input_channels: input[0].0, ..Default::default() };
 
-    for i in 1..input.len() {
-        data.output_channels = input[i].0;
-        data.activation_function = input[i].1;
+    for (neurons, act) in input.iter().skip(1) {
+        data.output_channels = *neurons;
+        data.activation_function = *act;
         out.push(data.clone());
-        data.input_channels = input[i].0;
+        data.input_channels = *neurons;
     }
 
     out
@@ -217,6 +327,10 @@ impl eframe::App for App {
             self.network_config(ui);
         });
 
+        egui::Window::new("Visualization config").show(ctx, |ui| {
+            self.visual_config(ui);
+        });
+
         // egui::SidePanel::left("side_panel").show(ctx, |ui| {
         //     self.network_config(ui);
         // });
@@ -232,100 +346,7 @@ impl eframe::App for App {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(network) = &self.neural_network {
-                let painter = ui.painter();
-
-                let Vec2 {
-                    x: width,
-                    y: height,
-                } = ui.available_size();
-
-                let margin_lr = 100.0;
-                let margin_ud = 50.0;
-
-                let layers = network.get_layers();
-                let columns = layers.len() + 1;
-                let column_spacing = (width - 2.0 * margin_lr) / (columns - 1) as f32;
-
-                let number_of_inputs = layers[0].get_input_channels();
-                let available_height = height - 2.0 * margin_ud;
-                let row_spacing = available_height / (number_of_inputs as f32);
-
-                // Draw all weights
-                for index in 0..layers.len() {
-                    let layer = &layers[index];
-                    let number_of_inputs = layer.get_input_channels();
-                    let number_of_neurons = layer.get_output_channels();
-                    let current_row_spacing = available_height / (number_of_neurons as f32);
-                    let previous_row_spacing = available_height / (number_of_inputs as f32);
-
-                    for neuron_index in 0..number_of_neurons {
-                        for input_index in 0..number_of_inputs {
-                            let weight_index = neuron_index * number_of_inputs + input_index;
-                            let weight = layer.weights.elems[weight_index];
-                            let weight_sigmoid = 1.0 / (1.0 + (-weight).exp());
-
-                            let color =
-                                interpolate_color(Color32::RED, Color32::BLUE, weight_sigmoid);
-
-                            painter.add(Shape::LineSegment {
-                                points: [
-                                    Pos2 {
-                                        x: margin_lr + (index + 1) as f32 * column_spacing,
-                                        y: margin_ud
-                                            + (neuron_index as f32 + 0.5) * current_row_spacing,
-                                    },
-                                    Pos2 {
-                                        x: margin_lr + index as f32 * column_spacing,
-                                        y: margin_ud
-                                            + (input_index as f32 + 0.5) * previous_row_spacing,
-                                    },
-                                ],
-                                stroke: Stroke {
-                                    width: 2.0,
-                                    color: color,
-                                },
-                            });
-                        }
-                    }
-                }
-
-                // Draw neurons on top
-                for inp_index in 0..number_of_inputs {
-                    painter.add(Shape::Circle(CircleShape {
-                        radius: 15.0,
-                        center: Pos2 {
-                            x: margin_lr,
-                            y: margin_ud + (inp_index as f32 + 0.5) * row_spacing,
-                        },
-                        fill: Color32::LIGHT_GRAY,
-                        stroke: Stroke::default(),
-                    }));
-                }
-
-                for index in 0..layers.len() {
-                    let layer = &layers[index];
-                    let number_of_neurons = layer.get_output_channels();
-                    let current_row_spacing = available_height / (number_of_neurons as f32);
-
-                    for neuron_index in 0..number_of_neurons {
-                        let bias = layer.biases.elems[neuron_index];
-                        let bias_sigmoid = 1.0 / (1.0 + (-bias).exp());
-
-                        let color = interpolate_color(Color32::RED, Color32::BLUE, bias_sigmoid);
-
-                        painter.add(Shape::Circle(CircleShape {
-                            radius: 15.0,
-                            center: Pos2 {
-                                x: margin_lr + (index + 1) as f32 * column_spacing,
-                                y: margin_ud + (neuron_index as f32 + 0.5) * current_row_spacing,
-                            },
-                            fill: color,
-                            stroke: Stroke::default(),
-                        }));
-                    }
-                }
-            }
+            self.visualize_network(ui);
         });
     }
 }

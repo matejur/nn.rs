@@ -9,7 +9,7 @@ pub struct Tensor {
 
 impl Tensor {
     pub fn new(shape: Vec<usize>) -> Self {
-        if shape.len() < 1 {
+        if shape.is_empty() {
             panic!("Shape can't have a length of 0");
         }
 
@@ -159,7 +159,7 @@ impl Tensor {
         self.elems
             .iter_mut()
             .enumerate()
-            .for_each(|(i, x)| *x = *x * other.elems[i]);
+            .for_each(|(i, x)| *x *= other.elems[i]);
     }
 
     pub fn argmax(&self) -> Vec<usize> {
@@ -205,17 +205,18 @@ impl Tensor {
     }
 
     pub fn scalar_multiply(&mut self, s: f32) {
-        self.elems.iter_mut().for_each(|x| *x = s * *x);
+        self.elems.iter_mut().for_each(|x| *x *= s);
     }
 
     pub fn add(out: &mut Self, a: &Self, b: &Self) {
-        if out.shape != a.shape && a.shape != b.shape {
-            if a.shape[a.shape.len() - 1] != b.shape[0] || b.shape.len() > 1 {
-                panic!(
-                    "Adding tensors of shapes {:?} and {:?} not supported",
-                    a.shape, b.shape
-                );
-            }
+        if out.shape != a.shape
+            && a.shape != b.shape
+            && (a.shape[a.shape.len() - 1] != b.shape[0] || b.shape.len() > 1)
+        {
+            panic!(
+                "Adding tensors of shapes {:?} and {:?} not supported",
+                a.shape, b.shape
+            );
         }
 
         for i in 0..out.elems.len() {
@@ -224,13 +225,13 @@ impl Tensor {
     }
 
     pub fn add_alloc(&self, other: &Self) -> Self {
-        if self.shape != other.shape {
-            if self.shape[self.shape.len() - 1] != other.shape[0] || other.shape.len() > 1 {
-                panic!(
-                    "Adding tensors of shapes {:?} and {:?} not supported",
-                    self.shape, other.shape
-                );
-            }
+        if self.shape != other.shape
+            && (self.shape[self.shape.len() - 1] != other.shape[0] || other.shape.len() > 1)
+        {
+            panic!(
+                "Adding tensors of shapes {:?} and {:?} not supported",
+                self.shape, other.shape
+            );
         }
 
         let out_shape = self.shape.to_owned();
@@ -243,13 +244,13 @@ impl Tensor {
     }
 
     pub fn add_self(&mut self, other: &Self) {
-        if self.shape != other.shape {
-            if self.shape[self.shape.len() - 1] != other.shape[0] || other.shape.len() > 1 {
-                panic!(
-                    "Adding tensors of shapes {:?} and {:?} not supported",
-                    self.shape, other.shape
-                );
-            }
+        if self.shape != other.shape
+            && (self.shape[self.shape.len() - 1] != other.shape[0] || other.shape.len() > 1)
+        {
+            panic!(
+                "Adding tensors of shapes {:?} and {:?} not supported",
+                self.shape, other.shape
+            );
         }
 
         for i in 0..self.elems.len() {
