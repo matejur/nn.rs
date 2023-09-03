@@ -1,4 +1,4 @@
-use egui::{Color32, Vec2, Shape, epaint::CircleShape, Pos2, Stroke};
+use egui::{epaint::CircleShape, Color32, Pos2, Shape, Stroke, Vec2};
 use nn::network::NeuralNetwork;
 
 pub struct Visualizer {
@@ -116,6 +116,9 @@ impl Visualizer {
 
 impl Default for Visualizer {
     fn default() -> Self {
-        Self { low_color: Color32::RED, high_color: Color32::BLUE }
+        Self {
+            low_color: Color32::RED,
+            high_color: Color32::BLUE,
+        }
     }
 }

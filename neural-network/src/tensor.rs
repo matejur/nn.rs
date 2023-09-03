@@ -43,6 +43,15 @@ impl Tensor {
         self.elems.copy_from_slice(elems);
     }
 
+    pub fn get_row(&self, row_index: usize) -> Option<&[f32]> {
+        if row_index >= self.shape[0] {
+            return None;
+        }
+
+        let start = row_index * self.shape[1];
+        Some(&self.elems[start..start + self.shape[1]])
+    }
+
     pub fn randomize(&mut self) {
         let mut rng = ChaCha8Rng::from_entropy();
         //let mut rng = ChaCha8Rng::seed_from_u64(42);
@@ -414,5 +423,18 @@ mod tests {
 
         m1.add_self(&m2);
         assert_eq!(m1, r);
+    }
+
+    #[test]
+    fn extract_rows() {
+        let m = Tensor::from_array(
+            vec![3, 4],
+            &to_float(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
+        );
+
+        assert_eq!(m.get_row(0), Some(vec![1.0, 2.0, 3.0, 4.0].as_slice()));
+        assert_eq!(m.get_row(1), Some(vec![5.0, 6.0, 7.0, 8.0].as_slice()));
+        assert_eq!(m.get_row(2), Some(vec![9.0, 10.0, 11.0, 12.0].as_slice()));
+        assert_eq!(m.get_row(3), None);
     }
 }
