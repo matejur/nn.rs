@@ -1,9 +1,11 @@
+mod visualization;
+use visualization::Visualizer;
+
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
 };
 
-use egui::{epaint::CircleShape, Color32, Pos2, Shape, Stroke, Vec2};
 use nn::{
     cost::CostFunction,
     linear::{Activation, LayerData, Linear},
@@ -25,8 +27,7 @@ pub struct App {
     neural_network: Option<NeuralNetwork>,
     auto_update: bool,
 
-    low_color: Color32,
-    high_color: Color32,
+    visualizer: Visualizer,
 }
 
 impl Default for App {
@@ -36,8 +37,7 @@ impl Default for App {
             neural_network: None,
             cost_function: CostFunction::CrossEntropy,
             auto_update: true,
-            low_color: Color32::RED,
-            high_color: Color32::BLUE,
+            visualizer: Visualizer::default(),
         }
     }
 }
@@ -157,112 +157,6 @@ impl App {
             }
         });
     }
-
-    fn visualize_network(&self, ui: &mut egui::Ui) {
-        if let Some(network) = &self.neural_network {
-            let painter = ui.painter();
-
-            let Vec2 {
-                x: width,
-                y: height,
-            } = ui.available_size();
-
-            let margin_lr = 100.0;
-            let margin_ud = 50.0;
-
-            let layers = network.get_layers();
-            let columns = layers.len() + 1;
-            let column_spacing = (width - 2.0 * margin_lr) / (columns - 1) as f32;
-
-            let number_of_inputs = layers[0].get_input_channels();
-            let available_height = height - 2.0 * margin_ud;
-            let row_spacing = available_height / (number_of_inputs as f32);
-
-            // Draw all weights
-            for (index, layer) in layers.iter().enumerate() {
-                let number_of_inputs = layer.get_input_channels();
-                let number_of_neurons = layer.get_output_channels();
-                let current_row_spacing = available_height / (number_of_neurons as f32);
-                let previous_row_spacing = available_height / (number_of_inputs as f32);
-
-                for neuron_index in 0..number_of_neurons {
-                    for input_index in 0..number_of_inputs {
-                        let weight_index = neuron_index * number_of_inputs + input_index;
-                        let weight = layer.weights.elems[weight_index];
-                        let weight_sigmoid = 1.0 / (1.0 + (-weight).exp());
-
-                        let color =
-                            interpolate_color(self.low_color, self.high_color, weight_sigmoid);
-
-                        painter.add(Shape::LineSegment {
-                            points: [
-                                Pos2 {
-                                    x: margin_lr + (index + 1) as f32 * column_spacing,
-                                    y: margin_ud
-                                        + (neuron_index as f32 + 0.5) * current_row_spacing,
-                                },
-                                Pos2 {
-                                    x: margin_lr + index as f32 * column_spacing,
-                                    y: margin_ud
-                                        + (input_index as f32 + 0.5) * previous_row_spacing,
-                                },
-                            ],
-                            stroke: Stroke {
-                                width: 2.0,
-                                color,
-                            },
-                        });
-                    }
-                }
-            }
-
-            // Draw neurons on top
-            for inp_index in 0..number_of_inputs {
-                painter.add(Shape::Circle(CircleShape {
-                    radius: 15.0,
-                    center: Pos2 {
-                        x: margin_lr,
-                        y: margin_ud + (inp_index as f32 + 0.5) * row_spacing,
-                    },
-                    fill: Color32::LIGHT_GRAY,
-                    stroke: Stroke::default(),
-                }));
-            }
-
-            for (index, layer) in layers.iter().enumerate() {
-                let number_of_neurons = layer.get_output_channels();
-                let current_row_spacing = available_height / (number_of_neurons as f32);
-
-                for neuron_index in 0..number_of_neurons {
-                    let bias = layer.biases.elems[neuron_index];
-                    let bias_sigmoid = 1.0 / (1.0 + (-bias).exp());
-
-                    let color = interpolate_color(self.low_color, self.high_color, bias_sigmoid);
-
-                    painter.add(Shape::Circle(CircleShape {
-                        radius: 15.0,
-                        center: Pos2 {
-                            x: margin_lr + (index + 1) as f32 * column_spacing,
-                            y: margin_ud + (neuron_index as f32 + 0.5) * current_row_spacing,
-                        },
-                        fill: color,
-                        stroke: Stroke::default(),
-                    }));
-                }
-            }
-        }
-    }
-
-    fn visual_config(&mut self, ui: &mut egui::Ui) {
-        ui.group(|ui| {
-            ui.horizontal(|ui| {
-                ui.label("Low color: ");
-                ui.color_edit_button_srgba(&mut self.low_color);
-                ui.label("High color: ");
-                ui.color_edit_button_srgba(&mut self.high_color);
-            });
-        });
-    }
 }
 
 fn create_network(
@@ -278,7 +172,10 @@ fn create_network(
 
 fn to_layer_data(input: &[(usize, Activation)]) -> Vec<LayerData> {
     let mut out = Vec::new();
-    let mut data = LayerData { input_channels: input[0].0, ..Default::default() };
+    let mut data = LayerData {
+        input_channels: input[0].0,
+        ..Default::default()
+    };
 
     for (neurons, act) in input.iter().skip(1) {
         data.output_channels = *neurons;
@@ -306,14 +203,6 @@ fn activation_function_selector(ui: &mut egui::Ui, act: &mut Activation, index: 
         });
 }
 
-fn interpolate_color(color1: Color32, color2: Color32, t: f32) -> Color32 {
-    let r = (1.0 - t) * color1.r() as f32 + t * color2.r() as f32;
-    let g = (1.0 - t) * color1.g() as f32 + t * color2.g() as f32;
-    let b = (1.0 - t) * color1.b() as f32 + t * color2.b() as f32;
-
-    Color32::from_rgb(r as u8, g as u8, b as u8)
-}
-
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let mut starting_hash = 0;
@@ -328,7 +217,7 @@ impl eframe::App for App {
         });
 
         egui::Window::new("Visualization config").show(ctx, |ui| {
-            self.visual_config(ui);
+            self.visualizer.visual_config(ui);
         });
 
         // egui::SidePanel::left("side_panel").show(ctx, |ui| {
@@ -346,7 +235,9 @@ impl eframe::App for App {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.visualize_network(ui);
+            if let Some(network) = &self.neural_network {
+                self.visualizer.visualize_network(ui, network);
+            }
         });
     }
 }
