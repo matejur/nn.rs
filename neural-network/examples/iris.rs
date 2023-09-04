@@ -25,7 +25,7 @@ fn main() {
     const EPOCHS: usize = 1000;
 
     let dataset =
-        Dataset::iris_from_csv("./datasets/iris.csv", true).expect("Iris dataset creation failed!");
+        Dataset::iris_from_csv("./datasets/iris.csv").expect("Iris dataset creation failed!");
     let (train_dataset, test_dataset) = dataset.train_test_split(0.9);
 
     let train_loader = DataLoader::new(train_dataset, BATCH_SIZE, false);

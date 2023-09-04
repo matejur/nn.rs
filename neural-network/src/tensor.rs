@@ -35,6 +35,18 @@ impl Tensor {
         }
     }
 
+    pub fn reshape(&mut self, new_shape: Vec<usize>) {
+        if new_shape.iter().product::<usize>() != self.elems.len() {
+            panic!(
+                "Can't fit {} into a shape {:?}",
+                self.elems.len(),
+                new_shape
+            );
+        }
+
+        self.shape = new_shape;
+    }
+
     pub fn set_data(&mut self, elems: &[f32]) {
         if elems.len() != self.elems.len() {
             panic!("New elements must be the same length as the old elems!");
@@ -193,12 +205,17 @@ impl Tensor {
     }
 
     pub fn softmax(&mut self) {
-        let max = self.elems.iter().copied().reduce(f32::max).unwrap();
         for sample_index in 0..self.shape[0] {
+            let sample_max = self.elems
+                [sample_index * self.shape[1]..sample_index * self.shape[1] + self.shape[1]]
+                .iter()
+                .copied()
+                .reduce(f32::max)
+                .unwrap();
             let mut denom = 0.0;
             for attrib_index in 0..self.shape[1] {
                 let i = sample_index * self.shape[1] + attrib_index;
-                self.elems[i] -= max;
+                self.elems[i] -= sample_max;
                 denom += self.elems[i].exp()
             }
 
