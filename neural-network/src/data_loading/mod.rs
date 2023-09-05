@@ -1,2 +1,2 @@
 pub mod data_loader;
-pub mod dataset;
+pub mod datasets;

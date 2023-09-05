@@ -2,10 +2,11 @@ use rand::seq::SliceRandom;
 
 use crate::tensor::Tensor;
 
-use super::dataset::Dataset;
+use super::datasets::Dataset;
 
 pub struct DataLoader {
-    dataset: Dataset,
+    data: Tensor,
+    labels: Tensor,
     batch_size: usize,
     shuffle: bool,
 }
@@ -23,20 +24,22 @@ pub struct DataLoaderIter<'a> {
 }
 
 impl DataLoader {
-    pub fn new(dataset: Dataset, batch_size: usize, shuffle: bool) -> Self {
-        if dataset.data.shape[0] % batch_size != 0 {
-            eprintln!("DATALOADER WARNING: The last {} rows will be dropped. Batch size does not evenly divide provided data TODO!", dataset.data.shape[0] % batch_size)
+    pub fn new(dataset: impl Dataset, batch_size: usize, shuffle: bool) -> Self {
+        let (data, labels) = dataset.get_data_labels();
+        if data.shape[0] % batch_size != 0 {
+            eprintln!("DATALOADER WARNING: The last {} rows will be dropped. Batch size does not evenly divide provided data TODO!", data.shape[0] % batch_size)
         }
 
         DataLoader {
-            dataset,
+            data,
+            labels,
             batch_size,
             shuffle,
         }
     }
 
     pub fn iter(&self) -> DataLoaderIter {
-        let mut indices: Vec<_> = (0..self.dataset.data.shape[0]).collect();
+        let mut indices: Vec<_> = (0..self.data.shape[0]).collect();
 
         if self.shuffle {
             indices.shuffle(&mut rand::thread_rng());
@@ -51,7 +54,7 @@ impl DataLoader {
     }
 
     pub fn len(&self) -> usize {
-        self.dataset.data.shape[0]
+        self.data.shape[0]
     }
 }
 
@@ -59,11 +62,11 @@ impl<'a> Iterator for DataLoaderIter<'a> {
     type Item = (Tensor, Tensor);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let data = &self.data_loader.dataset.data;
-        let labels = &self.data_loader.dataset.labels;
+        let data = &self.data_loader.data;
+        let labels = &self.data_loader.labels;
         let start_index = self.batch_index * self.batch_size;
 
-        if start_index + self.batch_index >= data.shape[0] {
+        if start_index + self.batch_size > data.shape[0] {
             return None;
         }
 
